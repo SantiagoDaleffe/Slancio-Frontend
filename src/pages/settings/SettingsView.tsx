@@ -69,7 +69,7 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    "X-API-Key": import.meta.env.VITE_API_MASTER_KEY,
+                    "Authorization": `Bearer ${token}`,
                 },
                 body: JSON.stringify(payload),
             })
