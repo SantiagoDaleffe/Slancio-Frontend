@@ -35,10 +35,3 @@ A modern, fast, and responsive management dashboard built with **React**, **Vite
 
 - **Node.js** (v18.x or higher)
 - **npm**, **pnpm**, or **yarn**
-
-### Installation
-
-1. **Clone the repository**:
-   ```bash
-   git clone [https://github.com/tu-usuario/tu-repositorio.git](https://github.com/tu-usuario/tu-repositorio.git)
-   cd tu-repositorio
