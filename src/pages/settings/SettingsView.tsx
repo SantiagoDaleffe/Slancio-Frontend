@@ -101,15 +101,15 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
     }
 
     return (
-        <div className="space-y-6">
-            <div className="flex items-center justify-between mb-8">
-                <div className="flex items-center gap-4">
+        <div className="space-y-6 px-4 py-6 max-w-4xl mx-auto">
+            <div className="flex flex-col sm:flex-row items-center sm:items-center justify-between mb-8 gap-4">
+                <div className="flex flex-col sm:flex-row items-center sm:items-center gap-4">
                     <img
-                        src="/logo-slancio.png"
+                        src="/slancio logo prototipe.jpg"
                         alt="Slancio"
-                        className="w-80 h-auto object-contain -ml-8 -mr-12"
+                        className="w-32 sm:w-48 h-auto object-contain"
                     />
-                    <div className="border-l-2 border-border pl-4">
+                    <div className="border-l-0 sm:border-l-2 border-border sm:pl-4 text-center sm:text-left">
                         <h1 className="text-2xl font-bold font-serif tracking-tight text-foreground">Configuración</h1>
                         <p className="text-sm text-muted-foreground">Gestioná las reglas del motor matemático</p>
                     </div>
@@ -123,7 +123,7 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
             <form onSubmit={handleSubmit(onSubmit)}>
                 <Card className="shadow-sm border-border">
                     <CardHeader>
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                             <div>
                                 <CardTitle className="text-xl font-bold font-serif">Reglas de Recuperación</CardTitle>
                                 <CardDescription>Ajustes generales para carritos abandonados</CardDescription>

@@ -45,14 +45,14 @@ export function LoginView({ onLoginSuccess }: LoginViewProps) {
     }
 
     return (
-        <div className="w-full max-w-sm p-4">
+        <div className="w-full max-w-sm mx-auto px-4 py-8">
             <form onSubmit={handleLogin} noValidate>
                 <Card className="shadow-sm border-border">
                     <CardHeader className="text-center flex flex-col items-center justify-center pb-6">
                         <img 
-                            src="/logo-slancio.png" 
+                            src="/slancio logo prototipe.jpg" 
                             alt="Slancio Logo" 
-                            className="w-full h-auto object-contain scale-155"
+                            className="w-full h-auto object-contain max-w-xs sm:max-w-sm"
                         />
                     </CardHeader>
                     <CardContent className="space-y-4">
