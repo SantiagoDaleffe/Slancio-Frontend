@@ -14,8 +14,8 @@ import { supabase } from "@/lib/supabase"
 interface FormValues {
     tenant_id: string
     is_active: boolean
-    max_discount_pct: number // 0 a 50 (se muestra en UI como %)
-    new_customer_discount: number // 0 a 50 (se muestra en UI como %)
+    max_discount_pct: number
+    new_customer_discount: number
     low_margin_action: "free_shipping" | "no_discount" | "fixed_amount"
     whale_threshold: number
     grace_period_hours: number
@@ -31,7 +31,7 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
 
     const { register, handleSubmit, control, watch } = useForm<FormValues>({
         defaultValues: {
-            tenant_id: "mitienda.myshopify.com",
+            tenant_id: "",
             is_active: true,
             max_discount_pct: 15,
             new_customer_discount: 20,
@@ -41,7 +41,6 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
         },
     })
 
-    // Leemos los valores en tiempo real para mostrarlos junto al Slider
     const maxDiscountVal = watch("max_discount_pct")
     const newCustomerDiscountVal = watch("new_customer_discount")
 
@@ -57,8 +56,8 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
                 tenant_id: data.tenant_id,
                 is_active: data.is_active,
                 rules: {
-                    max_discount_pct: data.max_discount_pct / 100, // 15 -> 0.15
-                    new_customer_discount: data.new_customer_discount / 100, // 20 -> 0.20
+                    max_discount_pct: data.max_discount_pct / 100,
+                    new_customer_discount: data.new_customer_discount / 100,
                     low_margin_action: data.low_margin_action,
                     whale_threshold: Number(data.whale_threshold),
                     grace_period_hours: Number(data.grace_period_hours),
@@ -75,12 +74,22 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
             })
 
             if (!response.ok) {
-                throw new Error(`Error en el servidor: ${response.statusText}`)
+                if (response.status === 403) {
+                    throw new Error("Acceso denegado: Este dominio ya está registrado por otra cuenta.")
+                }
+                throw new Error("Ocurrió un error en el servidor al guardar.")
             }
 
-            setMessage({ type: "success", text: "Rules saved successfully!" })
+            setMessage({ type: "success", text: "¡Reglas guardadas con éxito!" })
         } catch (err: any) {
-            setMessage({ type: "error", text: err.message || "An error occurred while saving" })
+            if (err.message === "Failed to fetch" || err.message.includes("NetworkError")) {
+                setMessage({ type: "error", text: "Error de red: El servidor de Slancio no responde." })
+            } else if (err.message.includes("JWT") || err.status === 401) {
+                setMessage({ type: "error", text: "Tu sesión expiró. Por favor, volvé a iniciar sesión." })
+                // Opcional: onLogout() si querés que lo patee a la pantalla de login automático
+            } else {
+                setMessage({ type: "error", text: err.message || "Ocurrió un error inesperado al guardar." })
+            }
         } finally {
             setLoading(false)
         }
@@ -92,16 +101,22 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
     }
 
     return (
-        <div className="w-full max-w-2xl mx-auto p-4 sm:p-6">
-            {/* Header superior del Panel */}
-            <div className="flex items-center justify-between mb-6">
-                <div>
-                    <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
-                    <p className="text-sm text-muted-foreground">Manage bot settings</p>
+        <div className="space-y-6">
+            <div className="flex items-center justify-between mb-8">
+                <div className="flex items-center gap-4">
+                    <img
+                        src="/logo-slancio.png"
+                        alt="Slancio"
+                        className="w-80 h-auto object-contain -ml-8 -mr-12"
+                    />
+                    <div className="border-l-2 border-border pl-4">
+                        <h1 className="text-2xl font-bold font-serif tracking-tight text-foreground">Configuración</h1>
+                        <p className="text-sm text-muted-foreground">Gestioná las reglas del motor matemático</p>
+                    </div>
                 </div>
                 <Button variant="outline" size="sm" onClick={handleLogout} className="flex items-center gap-2">
                     <LogOut className="h-4 w-4" />
-                    <span>Sign Out</span>
+                    <span>Cerrar Sesión</span>
                 </Button>
             </div>
 
@@ -110,18 +125,17 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
                     <CardHeader>
                         <div className="flex items-center justify-between">
                             <div>
-                                <CardTitle className="text-lg font-semibold">Rule Configuration</CardTitle>
-                                <CardDescription>General settings for abandoned cart rules</CardDescription>
+                                <CardTitle className="text-xl font-bold font-serif">Reglas de Recuperación</CardTitle>
+                                <CardDescription>Ajustes generales para carritos abandonados</CardDescription>
                             </div>
 
-                            {/* Switch is_active */}
                             <Controller
                                 name="is_active"
                                 control={control}
                                 render={({ field }) => (
                                     <div className="flex items-center space-x-2">
                                         <Label htmlFor="is_active" className="text-sm font-medium">
-                                            {field.value ? "Bot Active " : "Bot Inactive"}
+                                            {field.value ? "Bot Activo " : "Bot Inactivo"}
                                         </Label>
                                         <Switch id="is_active" checked={field.value} onCheckedChange={field.onChange} />
                                     </div>
@@ -131,7 +145,6 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
                     </CardHeader>
 
                     <CardContent className="space-y-6">
-                        {/* Input Tenant ID (Shopify / Tiendanube) */}
                         <div className="space-y-2">
                             <Label htmlFor="tenant_id" className="font-medium">
                                 Dominio de Shopify o ID de Tiendanube
@@ -139,7 +152,7 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
                             <Input
                                 id="tenant_id"
                                 type="text"
-                                placeholder="ej: mitienda.myshopify.com"
+                                placeholder="ej: remeraspepito.myshopify.com"
                                 {...register("tenant_id", { required: true })}
                             />
                             <p className="text-xs text-muted-foreground">
@@ -147,10 +160,9 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
                             </p>
                         </div>
 
-                        {/* Slider 1: max_discount_pct */}
                         <div className="space-y-3">
                             <div className="flex justify-between items-center">
-                                <Label className="font-medium">Maximum General Discount</Label>
+                                <Label className="font-medium">Descuento General Máximo</Label>
                                 <span className="text-sm font-semibold px-2 py-0.5 rounded bg-muted">
                                     {maxDiscountVal}%
                                 </span>
@@ -170,10 +182,9 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
                             />
                         </div>
 
-                        {/* Slider 2: new_customer_discount */}
                         <div className="space-y-3">
                             <div className="flex justify-between items-center">
-                                <Label className="font-medium">New Customer Discount</Label>
+                                <Label className="font-medium">Descuento a Nuevo Cliente</Label>
                                 <span className="text-sm font-semibold px-2 py-0.5 rounded bg-muted">
                                     {newCustomerDiscountVal}%
                                 </span>
@@ -193,42 +204,44 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
                             />
                         </div>
 
-                        {/* Dropdown: low_margin_action */}
                         <div className="space-y-2">
-                            <Label htmlFor="low_margin_action" className="font-medium">Action for Low Margin Items</Label>
+                            <Label htmlFor="low_margin_action" className="font-medium">Acción para Productos de Bajo Margen</Label>
                             <Controller
                                 name="low_margin_action"
                                 control={control}
                                 render={({ field }) => (
-                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                    <Select
+                                        onValueChange={field.onChange}
+                                        value={field.value}
+                                        defaultValue={field.value}
+                                    >
                                         <SelectTrigger className="w-full">
                                             <SelectValue placeholder="Seleccioná una acción" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="free_shipping">Free Shipping</SelectItem>
-                                            <SelectItem value="no_discount">No Discount</SelectItem>
-                                            <SelectItem value="fixed_amount">Fixed Amount</SelectItem>
+                                            <SelectItem value="free_shipping">Envío Gratis</SelectItem>
+                                            <SelectItem value="no_discount">Sin Descuento (Ignorar)</SelectItem>
+                                            <SelectItem value="fixed_amount">Descuento Fijo</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 )}
                             />
                         </div>
 
-                        {/* Inputs Numéricos */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <Label htmlFor="whale_threshold" className="font-medium">Whale Customer Threshold ($)</Label>
+                                <Label htmlFor="whale_threshold" className="font-medium">Umbral de Cliente VIP ($)</Label>
                                 <Input
                                     id="whale_threshold"
                                     type="number"
                                     step="0.01"
-                                    placeholder="500.00"
+                                    placeholder="50000.00"
                                     {...register("whale_threshold", { valueAsNumber: true })}
                                 />
                             </div>
 
                             <div className="space-y-2">
-                                <Label htmlFor="grace_period_hours" className="font-medium">Grace Period (Hours)</Label>
+                                <Label htmlFor="grace_period_hours" className="font-medium">Período de Gracia (Horas)</Label>
                                 <Input
                                     id="grace_period_hours"
                                     type="number"
@@ -238,7 +251,6 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
                             </div>
                         </div>
 
-                        {/* Banner de Feedback */}
                         {message && (
                             <div
                                 className={`p-3 rounded-md text-sm font-medium border ${message.type === "success"
@@ -255,11 +267,11 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
                         <Button type="submit" disabled={loading} className="w-full">
                             {loading ? (
                                 <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving changes...
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Guardando cambios...
                                 </>
                             ) : (
                                 <>
-                                    <Save className="mr-2 h-4 w-4" /> Save Configuration
+                                    <Save className="mr-2 h-4 w-4" /> Guardar Configuración
                                 </>
                             )}
                         </Button>
