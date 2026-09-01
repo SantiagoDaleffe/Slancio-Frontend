@@ -1,5 +1,3 @@
-import { useState } from "react"
-
 const info = [
     {id: 1, title: "Total Users", value: 1000},
     {id: 2, title: "Total Revenue", value: 50000},
@@ -7,7 +5,7 @@ const info = [
 ]
 
 const DashboardView = () => {
-    const [data, setData] = useState(info)
+    const data = info
 
     return (
         <div className="px-4 py-6 max-w-4xl mx-auto">
