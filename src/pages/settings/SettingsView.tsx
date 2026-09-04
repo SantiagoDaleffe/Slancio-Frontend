@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch"
 import { Loader2, Save, LogOut } from "lucide-react"
 import { API_BASE_URL } from "@/config/api"
 import { supabase } from "@/lib/supabase"
+import DashboardView from "@/pages/dashboard/DashboardView"
 
 interface FormValues {
     tenant_id: string
@@ -52,15 +53,30 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
             const { data: sessionData } = await supabase.auth.getSession()
             const token = sessionData.session?.access_token
 
+            if (!token) {
+                throw new Error("Tu sesión expiró. Volvé a iniciar sesión.")
+            }
+
+            const tenantId = data.tenant_id.trim()
+            const whaleThreshold = Number(data.whale_threshold)
+            const gracePeriodHours = Number(data.grace_period_hours)
+
+            if (!tenantId) {
+                throw new Error("Ingresá el dominio o ID de la tienda.")
+            }
+            if (!Number.isFinite(whaleThreshold) || !Number.isFinite(gracePeriodHours)) {
+                throw new Error("Completá los valores numéricos de la configuración.")
+            }
+
             const payload = {
-                tenant_id: data.tenant_id,
+                tenant_id: tenantId,
                 is_active: data.is_active,
                 rules: {
                     max_discount_pct: data.max_discount_pct / 100,
                     new_customer_discount: data.new_customer_discount / 100,
                     low_margin_action: data.low_margin_action,
-                    whale_threshold: Number(data.whale_threshold),
-                    grace_period_hours: Number(data.grace_period_hours),
+                    whale_threshold: whaleThreshold,
+                    grace_period_hours: gracePeriodHours,
                 },
             }
 
@@ -74,21 +90,47 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
             })
 
             if (!response.ok) {
+                const responseBody = await response.text()
+                let errorBody: { detail?: string; message?: string } | null = null
+
+                try {
+                    errorBody = JSON.parse(responseBody) as { detail?: string; message?: string }
+                } catch {
+                    // The backend may return plain text for internal errors.
+                }
+
+                console.error("Respuesta fallida al guardar la configuración", {
+                    status: response.status,
+                    responseBody,
+                    payload,
+                })
+
                 if (response.status === 403) {
                     throw new Error("Acceso denegado: Este dominio ya está registrado por otra cuenta.")
                 }
-                throw new Error("Ocurrió un error en el servidor al guardar.")
+                if (response.status === 401) {
+                    throw new Error("Tu sesión expiró. Volvé a iniciar sesión.")
+                }
+                throw new Error(errorBody?.detail || errorBody?.message || responseBody || `No se pudo guardar la configuración (${response.status}).`)
             }
 
+            console.log("Configuración guardada correctamente", payload)
             setMessage({ type: "success", text: "¡Reglas guardadas con éxito!" })
-        } catch (err: any) {
-            if (err.message === "Failed to fetch" || err.message.includes("NetworkError")) {
+        } catch (err: unknown) {
+            const error = err instanceof Error ? err : new Error("Ocurrió un error inesperado al guardar.")
+            console.error("Error al guardar la configuración", {
+                error,
+                endpoint: `${API_BASE_URL}/config/rules`,
+                message: error.message,
+            })
+
+            if (error.message === "Failed to fetch" || error.message.includes("NetworkError")) {
                 setMessage({ type: "error", text: "Error de red: El servidor de Slancio no responde." })
-            } else if (err.message.includes("JWT") || err.status === 401) {
-                setMessage({ type: "error", text: "Tu sesión expiró. Por favor, volvé a iniciar sesión." })
+            } else if (error.message.includes("JWT") || error.message.includes("sesión expiró")) {
+                setMessage({ type: "error", text: error.message })
                 // Opcional: onLogout() si querés que lo patee a la pantalla de login automático
             } else {
-                setMessage({ type: "error", text: err.message || "Ocurrió un error inesperado al guardar." })
+                setMessage({ type: "error", text: error.message })
             }
         } finally {
             setLoading(false)
@@ -119,6 +161,8 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
                     <span>Cerrar Sesión</span>
                 </Button>
             </div>
+
+            <DashboardView />
 
             <form onSubmit={handleSubmit(onSubmit)}>
                 <Card className="shadow-sm border-border">
