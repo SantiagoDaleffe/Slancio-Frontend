@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase"
 
 interface Metrics {
     total_emails_sent: number
-    total_cart_value: number
+    potential_value: number
     avg_discount_pct: number
     currency: string
 }
@@ -52,7 +52,7 @@ const DashboardView = () => {
                 </CardHeader>
                 <CardContent>
                     <p className="font-['Plus_Jakarta_Sans'] text-4xl font-bold leading-none tracking-tight text-emerald-950 dark:text-emerald-50">
-                        {metrics ? `${metrics.currency} ${metrics.total_cart_value.toLocaleString("es-AR")}` : "-"}
+                        {metrics ? `${metrics.currency} ${metrics.potential_value.toLocaleString("es-AR")}` : "-"}
                     </p>
                 </CardContent>
             </Card>
