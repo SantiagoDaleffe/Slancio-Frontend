@@ -17,9 +17,12 @@ interface FormValues {
     is_active: boolean
     max_discount_pct: number
     new_customer_discount: number
-    low_margin_action: "free_shipping" | "no_discount" | "fixed_amount"
+    whale_discount_pct: number
+    low_margin_action: "free_shipping" | "ignore" | "fixed_amount"
+    low_margin_fixed_amount: number
     whale_threshold: number
     grace_period_hours: number
+    cooldown_days: number
 }
 
 interface SettingsViewProps {
@@ -32,7 +35,7 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
 
     const lowMarginActionLabels: Record<FormValues["low_margin_action"], string> = {
         free_shipping: "Envío Gratis",
-        no_discount: "Sin Descuento (Ignorar)",
+        ignore: "Sin Descuento (Ignorar)",
         fixed_amount: "Descuento Fijo",
     }
 
@@ -42,14 +45,19 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
             is_active: true,
             max_discount_pct: 15,
             new_customer_discount: 20,
+            whale_discount_pct: 25,
             low_margin_action: "free_shipping",
-            whale_threshold: 500,
+            low_margin_fixed_amount: 0,
+            whale_threshold: 50000,
             grace_period_hours: 2,
+            cooldown_days: 15,
         },
     })
 
     const maxDiscountVal = watch("max_discount_pct")
     const newCustomerDiscountVal = watch("new_customer_discount")
+    const whaleDiscountVal = watch("whale_discount_pct")
+    const lowMarginActionVal = watch("low_margin_action")
 
     const onSubmit = async (data: FormValues) => {
         setLoading(true)
@@ -66,11 +74,13 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
             const tenantId = data.tenant_id.trim()
             const whaleThreshold = Number(data.whale_threshold)
             const gracePeriodHours = Number(data.grace_period_hours)
+            const cooldownDays = Number(data.cooldown_days)
+            const fixedAmount = Number(data.low_margin_fixed_amount)
 
             if (!tenantId) {
                 throw new Error("Ingresá el dominio o ID de la tienda.")
             }
-            if (!Number.isFinite(whaleThreshold) || !Number.isFinite(gracePeriodHours)) {
+            if (!Number.isFinite(whaleThreshold) || !Number.isFinite(gracePeriodHours) || !Number.isFinite(cooldownDays)) {
                 throw new Error("Completá los valores numéricos de la configuración.")
             }
 
@@ -80,9 +90,12 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
                 rules: {
                     max_discount_pct: data.max_discount_pct / 100,
                     new_customer_discount: data.new_customer_discount / 100,
+                    whale_discount_pct: data.whale_discount_pct / 100,
                     low_margin_action: data.low_margin_action,
+                    low_margin_fixed_amount: fixedAmount,
                     whale_threshold: whaleThreshold,
                     grace_period_hours: gracePeriodHours,
+                    cooldown_days: cooldownDays,
                 },
             }
 
@@ -254,8 +267,30 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
                             />
                         </div>
 
-                        <div className="space-y-2">
-                            <Label htmlFor="low_margin_action" className="font-medium">Acción para Productos de Bajo Margen</Label>
+                        <div className="space-y-3">
+                            <div className="flex justify-between items-center">
+                                <Label className="font-medium">Descuento a Cliente VIP</Label>
+                                <span className="text-sm font-semibold px-2 py-0.5 rounded bg-muted">
+                                    {whaleDiscountVal}%
+                                </span>
+                            </div>
+                            <Controller
+                                name="whale_discount_pct"
+                                control={control}
+                                render={({ field }) => (
+                                    <Slider
+                                        min={0}
+                                        max={50}
+                                        step={1}
+                                        value={[field.value]}
+                                        onValueChange={(val) => field.onChange(Array.isArray(val) ? val[0] : val)}
+                                    />
+                                )}
+                            />
+                        </div>
+
+                        <div className="space-y-2 border-t pt-4">
+                            <Label htmlFor="low_margin_action" className="font-medium">Acción para Liquidaciones / Bajo Margen</Label>
                             <Controller
                                 name="low_margin_action"
                                 control={control}
@@ -270,7 +305,7 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="free_shipping">Envío Gratis</SelectItem>
-                                            <SelectItem value="no_discount">Sin Descuento (Ignorar)</SelectItem>
+                                            <SelectItem value="ignore">Sin Descuento (Ignorar)</SelectItem>
                                             <SelectItem value="fixed_amount">Descuento Fijo</SelectItem>
                                         </SelectContent>
                                     </Select>
@@ -278,9 +313,22 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
                             />
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {lowMarginActionVal === "fixed_amount" && (
                             <div className="space-y-2">
-                                <Label htmlFor="whale_threshold" className="font-medium">Umbral de Cliente VIP ($)</Label>
+                                <Label htmlFor="low_margin_fixed_amount" className="font-medium text-sm text-muted-foreground">Monto de Descuento ($)</Label>
+                                <Input
+                                    id="low_margin_fixed_amount"
+                                    type="number"
+                                    step="0.01"
+                                    placeholder="ej: 5000"
+                                    {...register("low_margin_fixed_amount", { valueAsNumber: true })}
+                                />
+                            </div>
+                        )}
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t pt-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="whale_threshold" className="font-medium">Umbral VIP ($)</Label>
                                 <Input
                                     id="whale_threshold"
                                     type="number"
@@ -291,12 +339,22 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
                             </div>
 
                             <div className="space-y-2">
-                                <Label htmlFor="grace_period_hours" className="font-medium">Período de Gracia (Horas)</Label>
+                                <Label htmlFor="grace_period_hours" className="font-medium">Espera (Horas)</Label>
                                 <Input
                                     id="grace_period_hours"
                                     type="number"
                                     placeholder="2"
                                     {...register("grace_period_hours", { valueAsNumber: true })}
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="cooldown_days" className="font-medium">Días Anti-Spam</Label>
+                                <Input
+                                    id="cooldown_days"
+                                    type="number"
+                                    placeholder="15"
+                                    {...register("cooldown_days", { valueAsNumber: true })}
                                 />
                             </div>
                         </div>
