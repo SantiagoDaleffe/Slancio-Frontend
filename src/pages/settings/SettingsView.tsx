@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select"
 import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
 import { Loader2, Save, LogOut } from "lucide-react"
@@ -29,6 +29,12 @@ interface SettingsViewProps {
 export function SettingsView({ onLogout }: SettingsViewProps) {
     const [loading, setLoading] = useState(false)
     const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
+
+    const lowMarginActionLabels: Record<FormValues["low_margin_action"], string> = {
+        free_shipping: "Envío Gratis",
+        no_discount: "Sin Descuento (Ignorar)",
+        fixed_amount: "Descuento Fijo",
+    }
 
     const { register, handleSubmit, control, watch } = useForm<FormValues>({
         defaultValues: {
@@ -260,7 +266,7 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
                                         defaultValue={field.value}
                                     >
                                         <SelectTrigger className="w-full">
-                                            <SelectValue placeholder="Seleccioná una acción" />
+                                            <span>{lowMarginActionLabels[field.value] || "Seleccioná una acción"}</span>
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="free_shipping">Envío Gratis</SelectItem>
