@@ -1,16 +1,22 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Controller, useForm } from "react-hook-form"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select"
 import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
-import { Loader2, Save, LogOut } from "lucide-react"
+import {
+    ArrowUpRight,
+    CheckCircle2,
+    CircleHelp,
+    Loader2,
+    Save,
+    Sparkles,
+    Store,
+} from "lucide-react"
 import { API_BASE_URL } from "@/config/api"
 import { supabase } from "@/lib/supabase"
-import DashboardView from "@/pages/dashboard/DashboardView"
 
 interface FormValues {
     tenant_id: string
@@ -29,6 +35,99 @@ interface SettingsViewProps {
     onLogout?: () => void
 }
 
+const SETTINGS_STORAGE_KEY = "slancio-settings-v1"
+
+const getDefaultValues = (): FormValues => ({
+    tenant_id: "",
+    is_active: true,
+    max_discount_pct: 15,
+    new_customer_discount: 20,
+    whale_discount_pct: 25,
+    low_margin_action: "free_shipping",
+    low_margin_fixed_amount: 0,
+    whale_threshold: 50000,
+    grace_period_hours: 2,
+    cooldown_days: 15,
+})
+
+const parsePercentValue = (value: unknown, fallback: number) => {
+    const parsed = Number(value)
+
+    if (!Number.isFinite(parsed)) {
+        return fallback
+    }
+
+    return parsed > 1 ? parsed : parsed * 100
+}
+
+const normalizeSavedSettings = (settings: Partial<Record<string, unknown>> | null | undefined): FormValues => {
+    const defaults = getDefaultValues()
+
+    if (!settings || typeof settings !== "object") {
+        return defaults
+    }
+
+    const rules = settings.rules && typeof settings.rules === "object" ? settings.rules as Record<string, unknown> : settings
+
+    const lowMarginAction = settings.low_margin_action ?? rules.low_margin_action
+    const normalizedLowMarginAction =
+        lowMarginAction === "free_shipping" || lowMarginAction === "ignore" || lowMarginAction === "fixed_amount"
+            ? lowMarginAction
+            : defaults.low_margin_action
+
+    return {
+        tenant_id: typeof settings.tenant_id === "string" ? settings.tenant_id : defaults.tenant_id,
+        is_active: typeof settings.is_active === "boolean" ? settings.is_active : defaults.is_active,
+        max_discount_pct: parsePercentValue(rules.max_discount_pct ?? settings.max_discount_pct, defaults.max_discount_pct),
+        new_customer_discount: parsePercentValue(rules.new_customer_discount ?? settings.new_customer_discount, defaults.new_customer_discount),
+        whale_discount_pct: parsePercentValue(rules.whale_discount_pct ?? settings.whale_discount_pct, defaults.whale_discount_pct),
+        low_margin_action: normalizedLowMarginAction,
+        low_margin_fixed_amount: Number.isFinite(Number(rules.low_margin_fixed_amount ?? settings.low_margin_fixed_amount))
+            ? Number(rules.low_margin_fixed_amount ?? settings.low_margin_fixed_amount)
+            : defaults.low_margin_fixed_amount,
+        whale_threshold: Number.isFinite(Number(rules.whale_threshold ?? settings.whale_threshold))
+            ? Number(rules.whale_threshold ?? settings.whale_threshold)
+            : defaults.whale_threshold,
+        grace_period_hours: Number.isFinite(Number(rules.grace_period_hours ?? settings.grace_period_hours))
+            ? Number(rules.grace_period_hours ?? settings.grace_period_hours)
+            : defaults.grace_period_hours,
+        cooldown_days: Number.isFinite(Number(rules.cooldown_days ?? settings.cooldown_days))
+            ? Number(rules.cooldown_days ?? settings.cooldown_days)
+            : defaults.cooldown_days,
+    }
+}
+
+const readStoredSettings = (): FormValues | null => {
+    if (typeof window === "undefined") {
+        return null
+    }
+
+    try {
+        const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY)
+
+        if (!raw) {
+            return null
+        }
+
+        const parsed = JSON.parse(raw) as Partial<Record<string, unknown>>
+        return normalizeSavedSettings(parsed)
+    } catch {
+        return null
+    }
+}
+
+const persistSettings = (settings: FormValues) => {
+    if (typeof window === "undefined") {
+        return
+    }
+
+    try {
+        window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings))
+    } catch {
+        // Storage can fail in private browsing or quota-limited situations.
+    }
+}
+
 export function SettingsView({ onLogout }: SettingsViewProps) {
     const [loading, setLoading] = useState(false)
     const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
@@ -39,25 +138,53 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
         fixed_amount: "Descuento Fijo",
     }
 
-    const { register, handleSubmit, control, watch } = useForm<FormValues>({
-        defaultValues: {
-            tenant_id: "",
-            is_active: true,
-            max_discount_pct: 15,
-            new_customer_discount: 20,
-            whale_discount_pct: 25,
-            low_margin_action: "free_shipping",
-            low_margin_fixed_amount: 0,
-            whale_threshold: 50000,
-            grace_period_hours: 2,
-            cooldown_days: 15,
-        },
+    const { register, handleSubmit, control, watch, reset } = useForm<FormValues>({
+        defaultValues: getDefaultValues(),
     })
 
     const maxDiscountVal = watch("max_discount_pct")
     const newCustomerDiscountVal = watch("new_customer_discount")
     const whaleDiscountVal = watch("whale_discount_pct")
     const lowMarginActionVal = watch("low_margin_action")
+
+    useEffect(() => {
+        const loadSavedSettings = async () => {
+            const storedSettings = readStoredSettings()
+
+            if (storedSettings) {
+                reset(storedSettings)
+            }
+
+            try {
+                const { data: sessionData } = await supabase.auth.getSession()
+                const token = sessionData.session?.access_token
+
+                if (!token) {
+                    return
+                }
+
+                const response = await fetch(`${API_BASE_URL}/config/rules`, {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                })
+
+                if (!response.ok) {
+                    return
+                }
+
+                const payload = (await response.json()) as Partial<Record<string, unknown>>
+                const normalizedSettings = normalizeSavedSettings(payload)
+
+                reset(normalizedSettings)
+                persistSettings(normalizedSettings)
+            } catch {
+                // Ignore fetch failures and keep whatever is already stored locally.
+            }
+        }
+
+        void loadSavedSettings()
+    }, [reset])
 
     const onSubmit = async (data: FormValues) => {
         setLoading(true)
@@ -103,7 +230,7 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    "Authorization": `Bearer ${token}`,
+                    Authorization: `Bearer ${token}`,
                 },
                 body: JSON.stringify(payload),
             })
@@ -134,6 +261,7 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
             }
 
             console.log("Configuración guardada correctamente", payload)
+            persistSettings(data)
             setMessage({ type: "success", text: "¡Reglas guardadas con éxito!" })
         } catch (err: unknown) {
             const error = err instanceof Error ? err : new Error("Ocurrió un error inesperado al guardar.")
@@ -147,7 +275,6 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
                 setMessage({ type: "error", text: "Error de red: El servidor de Slancio no responde." })
             } else if (error.message.includes("JWT") || error.message.includes("sesión expiró")) {
                 setMessage({ type: "error", text: error.message })
-                // Opcional: onLogout() si querés que lo patee a la pantalla de login automático
             } else {
                 setMessage({ type: "error", text: error.message })
             }
@@ -157,235 +284,305 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
     }
 
     const handleLogout = async () => {
+        window.localStorage.removeItem(SETTINGS_STORAGE_KEY)
         await supabase.auth.signOut()
         if (onLogout) onLogout()
     }
 
+    const sectionClass = "rounded-[28px] border border-[#d7d0c4] bg-[#f6f3ee] p-5 shadow-[0_1px_0_rgba(31,77,67,0.04)]"
+    const labelClass = "text-sm font-medium text-[#1f2a28]"
+
     return (
-        <div className="space-y-6 px-4 py-6 max-w-4xl mx-auto">
-            <div className="flex flex-col sm:flex-row items-center sm:items-center justify-between mb-8 gap-4">
-                <div className="flex flex-col sm:flex-row items-center sm:items-center gap-4">
-                    <img
-                        src="/slancio logo prototipe.jpg"
-                        alt="Slancio"
-                        className="w-32 sm:w-48 h-auto object-contain"
-                    />
-                    <div className="border-l-0 sm:border-l-2 border-border sm:pl-4 text-center sm:text-left">
-                        <h1 className="text-2xl font-bold font-serif tracking-tight text-foreground">Configuración</h1>
-                        <p className="text-sm text-muted-foreground">Gestioná las reglas del motor matemático</p>
+        <div className="flex-1 px-4 py-6 md:px-8 md:py-8">
+            <div className="mx-auto max-w-300">
+                <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                    <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#5d6c66]">Optimiza tu recuperación</p>
+                        <h1 className="mt-2 text-4xl font-black tracking-[-0.06em] text-[#1f2a28] md:text-6xl">Configuración</h1>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                        <Button type="button" className="rounded-[18px] bg-[#1f4d43] px-5 text-sm font-semibold text-[#edf5f1] hover:bg-[#163f37]">
+                            Configurar bot
+                        </Button>
                     </div>
                 </div>
-                <Button variant="outline" size="sm" onClick={handleLogout} className="flex items-center gap-2">
-                    <LogOut className="h-4 w-4" />
-                    <span>Cerrar Sesión</span>
-                </Button>
-            </div>
 
-            <DashboardView />
+                <div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_320px]">
+                    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+                        <section className={sectionClass}>
+                            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                                <div>
+                                    <h2 className="text-[1.65rem] font-bold tracking-[-0.04em] text-[#1f2a28]">Bot de recuperación</h2>
+                                    <p className="mt-1 text-sm text-[#5d6c66]">Controla cuándo y cómo se contacta a tus clientes.</p>
+                                </div>
 
-            <form onSubmit={handleSubmit(onSubmit)}>
-                <Card className="shadow-sm border-border">
-                    <CardHeader>
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                            <div>
-                                <CardTitle className="text-xl font-bold font-serif">Reglas de Recuperación</CardTitle>
-                                <CardDescription>Ajustes generales para carritos abandonados</CardDescription>
+                                <Controller
+                                    name="is_active"
+                                    control={control}
+                                    render={({ field }) => (
+                                        <div className="flex items-center gap-3 rounded-full border border-[#d7d0c4] bg-[#f4efe7] px-3 py-2">
+                                            <Label htmlFor="is_active" className="text-sm font-semibold text-[#1f2a28]">
+                                                {field.value ? "Bot activo" : "Bot inactivo"}
+                                            </Label>
+                                            <Switch id="is_active" checked={field.value} onCheckedChange={field.onChange} />
+                                        </div>
+                                    )}
+                                />
                             </div>
 
-                            <Controller
-                                name="is_active"
-                                control={control}
-                                render={({ field }) => (
-                                    <div className="flex items-center space-x-2">
-                                        <Label htmlFor="is_active" className="text-sm font-medium">
-                                            {field.value ? "Bot Activo " : "Bot Inactivo"}
-                                        </Label>
-                                        <Switch id="is_active" checked={field.value} onCheckedChange={field.onChange} />
+                            <div className="mt-5 rounded-[22px] border border-[#d7d0c4] bg-[#edf4ef] p-4">
+                                <div className="flex items-center justify-between gap-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#d9eae2] text-[#1f4d43]">
+                                            <Store className="h-5 w-5" />
+                                        </div>
+
+                                        <div className="flex-1">
+                                            <Label htmlFor="tenant_id" className="mb-2 block text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-[#5d6c66]">
+                                                Dominio de Shopify o ID de Tiendanube
+                                            </Label>
+                                            <Input
+                                                id="tenant_id"
+                                                type="text"
+                                                placeholder="ej: remeraspepito.myshopify.com"
+                                                className="h-12 rounded-[16px] border-[#d7d0c4] bg-[#f8f5f0] text-base"
+                                                {...register("tenant_id", { required: true })}
+                                            />
+                                        </div>
                                     </div>
-                                )}
-                            />
-                        </div>
-                    </CardHeader>
 
-                    <CardContent className="space-y-6">
-                        <div className="space-y-2">
-                            <Label htmlFor="tenant_id" className="font-medium">
-                                Dominio de Shopify o ID de Tiendanube
-                            </Label>
-                            <Input
-                                id="tenant_id"
-                                type="text"
-                                placeholder="ej: remeraspepito.myshopify.com"
-                                {...register("tenant_id", { required: true })}
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                Identificador único de la tienda que va a consumir las reglas.
-                            </p>
-                        </div>
-
-                        <div className="space-y-3">
-                            <div className="flex justify-between items-center">
-                                <Label className="font-medium">Descuento General Máximo</Label>
-                                <span className="text-sm font-semibold px-2 py-0.5 rounded bg-muted">
-                                    {maxDiscountVal}%
-                                </span>
+                                    <div className="flex items-center gap-2 rounded-full bg-[#dff1e5] px-3 py-1.5 text-sm font-semibold text-[#1a6a4e]">
+                                        <span className="h-2.5 w-2.5 rounded-full bg-[#29b06b]" />
+                                        Conectada
+                                    </div>
+                                </div>
                             </div>
-                            <Controller
-                                name="max_discount_pct"
-                                control={control}
-                                render={({ field }) => (
-                                    <Slider
-                                        min={0}
-                                        max={50}
-                                        step={1}
-                                        value={[field.value]}
-                                        onValueChange={(val) => field.onChange(Array.isArray(val) ? val[0] : val)}
+                        </section>
+
+                        <section className={sectionClass}>
+                            <div className="mb-5 flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-[1.65rem] font-bold tracking-[-0.04em] text-[#1f2a28]">Oferta personalizada</h2>
+                                    <p className="mt-1 text-sm text-[#5d6c66]">Define el descuento y el comportamiento del cupón.</p>
+                                </div>
+                            </div>
+
+                            <div className="space-y-5">
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <Label className={labelClass}>Descuento máximo</Label>
+                                        <span className="rounded-full bg-[#edf3ef] px-2.5 py-1 text-sm font-semibold text-[#1f2a28]">{maxDiscountVal}%</span>
+                                    </div>
+                                    <Controller
+                                        name="max_discount_pct"
+                                        control={control}
+                                        render={({ field }) => (
+                                            <Slider
+                                                min={0}
+                                                max={50}
+                                                step={1}
+                                                value={[field.value]}
+                                                onValueChange={(val) => field.onChange(Array.isArray(val) ? val[0] : val)}
+                                            />
+                                        )}
                                     />
-                                )}
-                            />
-                        </div>
+                                </div>
 
-                        <div className="space-y-3">
-                            <div className="flex justify-between items-center">
-                                <Label className="font-medium">Descuento a Nuevo Cliente</Label>
-                                <span className="text-sm font-semibold px-2 py-0.5 rounded bg-muted">
-                                    {newCustomerDiscountVal}%
-                                </span>
-                            </div>
-                            <Controller
-                                name="new_customer_discount"
-                                control={control}
-                                render={({ field }) => (
-                                    <Slider
-                                        min={0}
-                                        max={50}
-                                        step={1}
-                                        value={[field.value]}
-                                        onValueChange={(val) => field.onChange(Array.isArray(val) ? val[0] : val)}
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <Label className={labelClass}>Descuento a nuevo cliente</Label>
+                                        <span className="rounded-full bg-[#edf3ef] px-2.5 py-1 text-sm font-semibold text-[#1f2a28]">{newCustomerDiscountVal}%</span>
+                                    </div>
+                                    <Controller
+                                        name="new_customer_discount"
+                                        control={control}
+                                        render={({ field }) => (
+                                            <Slider
+                                                min={0}
+                                                max={50}
+                                                step={1}
+                                                value={[field.value]}
+                                                onValueChange={(val) => field.onChange(Array.isArray(val) ? val[0] : val)}
+                                            />
+                                        )}
                                     />
-                                )}
-                            />
-                        </div>
+                                </div>
 
-                        <div className="space-y-3">
-                            <div className="flex justify-between items-center">
-                                <Label className="font-medium">Descuento a Cliente VIP</Label>
-                                <span className="text-sm font-semibold px-2 py-0.5 rounded bg-muted">
-                                    {whaleDiscountVal}%
-                                </span>
-                            </div>
-                            <Controller
-                                name="whale_discount_pct"
-                                control={control}
-                                render={({ field }) => (
-                                    <Slider
-                                        min={0}
-                                        max={50}
-                                        step={1}
-                                        value={[field.value]}
-                                        onValueChange={(val) => field.onChange(Array.isArray(val) ? val[0] : val)}
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <Label className={labelClass}>Descuento VIP</Label>
+                                        <span className="rounded-full bg-[#edf3ef] px-2.5 py-1 text-sm font-semibold text-[#1f2a28]">{whaleDiscountVal}%</span>
+                                    </div>
+                                    <Controller
+                                        name="whale_discount_pct"
+                                        control={control}
+                                        render={({ field }) => (
+                                            <Slider
+                                                min={0}
+                                                max={50}
+                                                step={1}
+                                                value={[field.value]}
+                                                onValueChange={(val) => field.onChange(Array.isArray(val) ? val[0] : val)}
+                                            />
+                                        )}
                                     />
-                                )}
-                            />
-                        </div>
-
-                        <div className="space-y-2 border-t pt-4">
-                            <Label htmlFor="low_margin_action" className="font-medium">Acción para Liquidaciones / Bajo Margen</Label>
-                            <Controller
-                                name="low_margin_action"
-                                control={control}
-                                render={({ field }) => (
-                                    <Select
-                                        onValueChange={field.onChange}
-                                        value={field.value}
-                                        defaultValue={field.value}
-                                    >
-                                        <SelectTrigger className="w-full">
-                                            <span>{lowMarginActionLabels[field.value] || "Seleccioná una acción"}</span>
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="free_shipping">Envío Gratis</SelectItem>
-                                            <SelectItem value="ignore">Sin Descuento (Ignorar)</SelectItem>
-                                            <SelectItem value="fixed_amount">Descuento Fijo</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                )}
-                            />
-                        </div>
-
-                        {lowMarginActionVal === "fixed_amount" && (
-                            <div className="space-y-2">
-                                <Label htmlFor="low_margin_fixed_amount" className="font-medium text-sm text-muted-foreground">Monto de Descuento ($)</Label>
-                                <Input
-                                    id="low_margin_fixed_amount"
-                                    type="number"
-                                    step="0.01"
-                                    placeholder="ej: 5000"
-                                    {...register("low_margin_fixed_amount", { valueAsNumber: true })}
-                                />
+                                </div>
                             </div>
-                        )}
+                        </section>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t pt-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="whale_threshold" className="font-medium">Umbral VIP ($)</Label>
-                                <Input
-                                    id="whale_threshold"
-                                    type="number"
-                                    step="0.01"
-                                    placeholder="50000.00"
-                                    {...register("whale_threshold", { valueAsNumber: true })}
-                                />
+                        <section className={sectionClass}>
+                            <div className="mb-5">
+                                <h2 className="text-[1.65rem] font-bold tracking-[-0.04em] text-[#1f2a28]">Límites y timing</h2>
+                                <p className="mt-1 text-sm text-[#5d6c66]">Ajustá el comportamiento y el timing de tus campañas.</p>
                             </div>
 
                             <div className="space-y-2">
-                                <Label htmlFor="grace_period_hours" className="font-medium">Espera (Horas)</Label>
-                                <Input
-                                    id="grace_period_hours"
-                                    type="number"
-                                    placeholder="2"
-                                    {...register("grace_period_hours", { valueAsNumber: true })}
+                                <Label htmlFor="low_margin_action" className={labelClass}>Acción para liquidaciones / bajo margen</Label>
+                                <Controller
+                                    name="low_margin_action"
+                                    control={control}
+                                    render={({ field }) => (
+                                        <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
+                                            <SelectTrigger className="h-12 w-full rounded-[16px] border-[#d7d0c4] bg-[#f8f5f0] text-[#1f2a28]">
+                                                <span>{lowMarginActionLabels[field.value] || "Seleccioná una acción"}</span>
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="free_shipping">Envío Gratis</SelectItem>
+                                                <SelectItem value="ignore">Sin Descuento (Ignorar)</SelectItem>
+                                                <SelectItem value="fixed_amount">Descuento Fijo</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    )}
                                 />
                             </div>
 
-                            <div className="space-y-2">
-                                <Label htmlFor="cooldown_days" className="font-medium">Días Anti-Spam</Label>
-                                <Input
-                                    id="cooldown_days"
-                                    type="number"
-                                    placeholder="15"
-                                    {...register("cooldown_days", { valueAsNumber: true })}
-                                />
+                            {lowMarginActionVal === "fixed_amount" && (
+                                <div className="mt-4 space-y-2">
+                                    <Label htmlFor="low_margin_fixed_amount" className={labelClass}>Monto de descuento fijo ($)</Label>
+                                    <Input
+                                        id="low_margin_fixed_amount"
+                                        type="number"
+                                        step="0.01"
+                                        placeholder="ej: 5000"
+                                        className="h-12 rounded-[16px] border-[#d7d0c4] bg-[#f8f5f0]"
+                                        {...register("low_margin_fixed_amount", { valueAsNumber: true })}
+                                    />
+                                </div>
+                            )}
+
+                            <div className="mt-5 grid gap-4 md:grid-cols-3">
+                                <div className="space-y-2">
+                                    <Label htmlFor="whale_threshold" className={labelClass}>Umbral VIP ($)</Label>
+                                    <Input
+                                        id="whale_threshold"
+                                        type="number"
+                                        step="0.01"
+                                        placeholder="50000"
+                                        className="h-12 rounded-[16px] border-[#d7d0c4] bg-[#f8f5f0]"
+                                        {...register("whale_threshold", { valueAsNumber: true })}
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label htmlFor="grace_period_hours" className={labelClass}>Espera (horas)</Label>
+                                    <Input
+                                        id="grace_period_hours"
+                                        type="number"
+                                        placeholder="2"
+                                        className="h-12 rounded-[16px] border-[#d7d0c4] bg-[#f8f5f0]"
+                                        {...register("grace_period_hours", { valueAsNumber: true })}
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label htmlFor="cooldown_days" className={labelClass}>Días anti spam</Label>
+                                    <Input
+                                        id="cooldown_days"
+                                        type="number"
+                                        placeholder="15"
+                                        className="h-12 rounded-[16px] border-[#d7d0c4] bg-[#f8f5f0]"
+                                        {...register("cooldown_days", { valueAsNumber: true })}
+                                    />
+                                </div>
                             </div>
-                        </div>
+                        </section>
 
                         {message && (
                             <div
-                                className={`p-3 rounded-md text-sm font-medium border ${message.type === "success"
-                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400"
-                                    : "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400"
+                                className={`rounded-[18px] border px-4 py-3 text-sm font-medium ${message.type === "success"
+                                    ? "border-[#bfdccf] bg-[#eaf5ee] text-[#1b6a4d]"
+                                    : "border-[#e7b9b5] bg-[#fdf0ee] text-[#9d3b34]"
                                     }`}
                             >
                                 {message.text}
                             </div>
                         )}
-                    </CardContent>
 
-                    <CardFooter>
-                        <Button type="submit" disabled={loading} className="w-full">
-                            {loading ? (
-                                <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Guardando cambios...
-                                </>
-                            ) : (
-                                <>
-                                    <Save className="mr-2 h-4 w-4" /> Guardar Configuración
-                                </>
-                            )}
-                        </Button>
-                    </CardFooter>
-                </Card>
-            </form>
+                        <div className="rounded-[22px] border border-[#d7d0c4] bg-[#f6f3ee] p-3">
+                            <Button type="submit" disabled={loading} className="w-full rounded-[16px] bg-[#1f4d43] px-5 py-3 text-base font-semibold text-[#edf5f1] hover:bg-[#163f37]">
+                                {loading ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Guardando cambios...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Save className="mr-2 h-4 w-4" />
+                                        Guardar configuración
+                                    </>
+                                )}
+                            </Button>
+                        </div>
+                    </form>
+
+                    <aside className="space-y-6">
+                        <div className="rounded-[28px] bg-[#1f4d43] p-5 text-[#edf5f1] shadow-[0_20px_35px_rgba(31,77,67,0.25)]">
+                            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-[18px] bg-white/10 text-[#edf5f1]">
+                                <Sparkles className="h-6 w-6" />
+                            </div>
+
+                            <h3 className="text-[2rem] font-bold tracking-[-0.06em] text-[#f4faf6]">Más ventas, menos esfuerzo</h3>
+                            <p className="mt-3 text-sm leading-relaxed text-[#d8eae3]">
+                                Slancio encuentra el momento perfecto para recuperar cada carrito con una oferta que convierte.
+                            </p>
+                        </div>
+
+                        <div className="rounded-[28px] border border-[#d7d0c4] bg-[#f6f3ee] p-5">
+                            <div className="flex items-start gap-3">
+                                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#dfece6] text-[#1f4d43]">
+                                    <CircleHelp className="h-4 w-4" />
+                                </div>
+
+                                <div>
+                                    <h4 className="text-xl font-bold tracking-[-0.04em] text-[#1f2a28]">¿Necesitas ayuda?</h4>
+                                    <p className="mt-1 text-sm text-[#5d6c66]">Estamos para acompañarte.</p>
+                                </div>
+                            </div>
+
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="mt-5 w-full justify-between rounded-[16px] border-[#d7d0c4] bg-[#f8f5f0] px-4 py-3 text-base font-semibold text-[#1f2a28] hover:bg-[#edf3ef]"
+                            >
+                                <span className="flex items-center gap-2">
+                                    <CheckCircle2 className="h-4 w-4" />
+                                    Hablar con soporte
+                                </span>
+                                <ArrowUpRight className="h-4 w-4" />
+                            </Button>
+                        </div>
+                    </aside>
+                </div>
+            </div>
+
+            <div className="mx-auto mt-6 flex max-w-300 items-center justify-end gap-2 px-2 text-sm text-[#6c7d77] md:px-0">
+                <button type="button" onClick={handleLogout} className="inline-flex items-center gap-2 rounded-full px-2 py-1 transition hover:bg-[#edf3ef]">
+                    <ArrowUpRight className="h-4 w-4 rotate-180" />
+                    Cerrar sesión
+                </button>
+            </div>
         </div>
     )
 }
+
