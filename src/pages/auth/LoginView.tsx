@@ -68,29 +68,6 @@ export function LoginView({ onLoginSuccess, onOpenTerms, onOpenPrivacy }: LoginV
                         <p className="mt-6 max-w-130 text-xl leading-relaxed text-[#dfeae3]">
                             Slancio trabaja en silencio para que tu tienda venda más, sin perseguir a tus clientes.
                         </p>
-
-                        <div className="mt-8 flex flex-wrap items-center gap-4">
-                            <div className="flex items-center gap-3">
-                                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#dff3e8] text-xs font-black text-[#0f4d3a]">
-                                    MG
-                                </div>
-                                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#dff3e8] text-xs font-black text-[#0f4d3a]">
-                                    TR
-                                </div>
-                                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#dff3e8] text-xs font-black text-[#0f4d3a]">
-                                    CS
-                                </div>
-                            </div>
-
-                            <div className="flex items-center gap-2 text-base font-semibold text-[#edf4f1]">
-                                <span className="text-[#a6dfc1]">+2.500</span>
-                                <span className="text-[#dfeae3]">tiendas</span>
-                            </div>
-
-                            <div className="text-base text-[#dfeae3]">
-                                ya recuperan ventas con Slancio
-                            </div>
-                        </div>
                     </div>
 
                     <div className="flex justify-center lg:justify-end">

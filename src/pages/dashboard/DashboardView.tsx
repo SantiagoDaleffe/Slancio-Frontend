@@ -215,7 +215,7 @@ const DashboardView = () => {
                         <div className="mb-4 flex items-center justify-between gap-3">
                             <div>
                                 <p className="text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-[#5d6c66]">Evolución</p>
-                                <h2 className="mt-1 text-2xl font-black tracking-[-0.06em] text-[#1f2a28]">Plata recuperada</h2>
+                                <h2 className="mt-1 text-2xl font-black tracking-[-0.06em] text-[#1f2a28]">Valor recuperado</h2>
                             </div>
                             <span className="rounded-full bg-[#edf3ef] px-2.5 py-1 text-xs font-semibold text-[#1f4d43]">Últimos 6 meses</span>
                         </div>

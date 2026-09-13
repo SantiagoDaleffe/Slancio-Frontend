@@ -314,7 +314,7 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
                                             <Input
                                                 id="tenant_id"
                                                 type="text"
-                                                placeholder="ej: remeraspepito.myshopify.com"
+                                                placeholder="ej: tudominio.myshopify.com"
                                                 className="h-12 rounded-[16px] border-[#d7d0c4] bg-[#f8f5f0] text-base"
                                                 {...register("tenant_id", { required: true })}
                                             />
