@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { ArrowRight, Loader2, Sparkles } from "lucide-react"
+import { ArrowRight, Loader2, ShoppingCart } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -46,10 +46,10 @@ export function LoginView({ onLoginSuccess, onOpenTerms, onOpenPrivacy }: LoginV
 
     return (
         <div className="min-h-screen w-full bg-[#0f4d3a] text-[#edf4f1]">
-            <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-8 lg:px-10">
+            <div className="mx-auto max-w-375 px-5 py-5 sm:px-8 lg:px-10">
                 <header className="flex items-center gap-3 pl-2 pt-2">
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#dff3e8] text-[#0f4d3a] shadow-sm">
-                        <Sparkles className="h-4 w-4" />
+                        <ShoppingCart className="h-4 w-4" />
                     </div>
                     <div className="text-[2.1rem] font-black leading-none tracking-[-0.08em] text-[#f0f5f2]">slancio</div>
                 </header>
@@ -61,11 +61,11 @@ export function LoginView({ onLoginSuccess, onOpenTerms, onOpenPrivacy }: LoginV
                             Recuperación inteligente para ecommerce
                         </div>
 
-                        <h1 className="mt-8 max-w-[620px] text-[3.4rem] font-black leading-[0.86] tracking-[-0.07em] text-[#edf7ef] sm:text-[4.8rem] lg:text-[7rem]">
+                        <h1 className="mt-8 max-w-155 text-[3.4rem] font-black leading-[0.86] tracking-[-0.07em] text-[#edf7ef] sm:text-[4.8rem] lg:text-[7rem]">
                             Convierte carritos olvidados en <span className="text-[#90d5b3]">ventas.</span>
                         </h1>
 
-                        <p className="mt-6 max-w-[520px] text-xl leading-relaxed text-[#dfeae3]">
+                        <p className="mt-6 max-w-130 text-xl leading-relaxed text-[#dfeae3]">
                             Slancio trabaja en silencio para que tu tienda venda más, sin perseguir a tus clientes.
                         </p>
 
@@ -94,7 +94,7 @@ export function LoginView({ onLoginSuccess, onOpenTerms, onOpenPrivacy }: LoginV
                     </div>
 
                     <div className="flex justify-center lg:justify-end">
-                        <div className="w-full max-w-[520px] rounded-[30px] bg-[#f2f0ec] p-6 text-[#1f2a28] shadow-[0_28px_60px_rgba(10,20,18,0.28)] sm:p-8">
+                        <div className="w-full max-w-130 rounded-[30px] bg-[#f2f0ec] p-6 text-[#1f2a28] shadow-[0_28px_60px_rgba(10,20,18,0.28)] sm:p-8">
                             <p className="text-[0.72rem] font-bold uppercase tracking-[0.22em] text-[#5d6c66]">
                                 BIENVENIDO DE VUELTA
                             </p>

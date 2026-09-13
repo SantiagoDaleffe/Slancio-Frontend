@@ -12,7 +12,7 @@ import {
     CircleHelp,
     Loader2,
     Save,
-    Sparkles,
+    ShoppingCart,
     Store,
 } from "lucide-react"
 import { API_BASE_URL } from "@/config/api"
@@ -148,42 +148,11 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
     const lowMarginActionVal = watch("low_margin_action")
 
     useEffect(() => {
-        const loadSavedSettings = async () => {
-            const storedSettings = readStoredSettings()
+        const storedSettings = readStoredSettings()
 
-            if (storedSettings) {
-                reset(storedSettings)
-            }
-
-            try {
-                const { data: sessionData } = await supabase.auth.getSession()
-                const token = sessionData.session?.access_token
-
-                if (!token) {
-                    return
-                }
-
-                const response = await fetch(`${API_BASE_URL}/config/rules`, {
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
-                })
-
-                if (!response.ok) {
-                    return
-                }
-
-                const payload = (await response.json()) as Partial<Record<string, unknown>>
-                const normalizedSettings = normalizeSavedSettings(payload)
-
-                reset(normalizedSettings)
-                persistSettings(normalizedSettings)
-            } catch {
-                // Ignore fetch failures and keep whatever is already stored locally.
-            }
+        if (storedSettings) {
+            reset(storedSettings)
         }
-
-        void loadSavedSettings()
     }, [reset])
 
     const onSubmit = async (data: FormValues) => {
@@ -539,7 +508,7 @@ export function SettingsView({ onLogout }: SettingsViewProps) {
                     <aside className="space-y-6">
                         <div className="rounded-[28px] bg-[#1f4d43] p-5 text-[#edf5f1] shadow-[0_20px_35px_rgba(31,77,67,0.25)]">
                             <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-[18px] bg-white/10 text-[#edf5f1]">
-                                <Sparkles className="h-6 w-6" />
+                                <ShoppingCart className="h-6 w-6" />
                             </div>
 
                             <h3 className="text-[2rem] font-bold tracking-[-0.06em] text-[#f4faf6]">Más ventas, menos esfuerzo</h3>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { ArrowUpRight as ArrowUpRightIcon, Mail, TrendingUp, Percent, PackageCheck, Sparkles } from "lucide-react"
+import { ArrowUpRight as ArrowUpRightIcon, Mail, TrendingUp, Percent, PackageCheck, Settings } from "lucide-react"
 import {
     Bar,
     CartesianGrid,
@@ -180,7 +180,7 @@ const DashboardView = () => {
                     type="button"
                     className="hidden items-center gap-2 rounded-[18px] bg-[#1f4d43] px-5 py-3 text-sm font-semibold text-[#edf5f1] shadow-[0_14px_20px_rgba(31,77,67,0.16)] transition hover:bg-[#163f37] md:inline-flex"
                 >
-                    <Sparkles className="h-4 w-4" />
+                    <Settings className="h-4 w-4" />
                     Configurar bot
                 </button>
             </div>
